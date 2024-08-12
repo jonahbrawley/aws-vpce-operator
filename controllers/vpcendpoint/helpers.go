@@ -810,7 +810,7 @@ func (r *VpcEndpointReconciler) findOrCreatePrivateHostedZone(ctx context.Contex
 
 		for _, hz := range resp.HostedZoneSummaries {
 			// If we find a matching hosted zone, update status
-			if strings.TrimRight(*hz.Name, ".") == domainName {
+			if *hz.Name == domainName {
 				if resource.Status.HostedZoneId != *hz.HostedZoneId {
 					resource.Status.HostedZoneId = *hz.HostedZoneId
 					if err := r.Status().Update(ctx, resource); err != nil {
@@ -818,7 +818,6 @@ func (r *VpcEndpointReconciler) findOrCreatePrivateHostedZone(ctx context.Contex
 						return err
 					}
 				}
-
 				return nil
 			}
 		}
