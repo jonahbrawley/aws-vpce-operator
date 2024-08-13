@@ -351,7 +351,8 @@ func (r *VpcEndpointReconciler) validateR53HostedZoneRecord(ctx context.Context,
 	}
 
 	for _, record := range recordlist.ResourceRecordSets {
-		if record.Name == &resource.Status.ResourceRecordSet {
+		if strings.TrimRight(*record.Name, ".") == resource.Status.ResourceRecordSet {
+			r.log.V(0).Info("Skipping Route53 Record", "Name", record.Name)
 			return nil
 		}
 	}
