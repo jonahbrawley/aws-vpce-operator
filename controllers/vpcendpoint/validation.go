@@ -343,6 +343,19 @@ func (r *VpcEndpointReconciler) validateR53HostedZoneRecord(ctx context.Context,
 		return errors.New("resource must be specified")
 	}
 
+	// If it is updating the GoAlert DNS entry for an active cluster, do not overwrite.
+	// Instead, elsewhere AVO will add it's corresponding inbound rules to the existing cluster's GoAlert security group.
+	recordlist, err := r.awsClient.ListResourceRecordSets(ctx, resource.Status.HostedZoneId)
+	if err != nil {
+		return err
+	}
+
+	for _, record := range recordlist.ResourceRecordSets {
+		if record.Name == &resource.Status.ResourceRecordSet {
+			return nil
+		}
+	}
+
 	resp, err := r.awsClient.GetHostedZone(ctx, resource.Status.HostedZoneId)
 	if err != nil {
 		return err
