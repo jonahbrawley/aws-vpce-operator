@@ -351,7 +351,7 @@ func (r *VpcEndpointReconciler) validateR53HostedZoneRecord(ctx context.Context,
 	}
 
 	for _, record := range recordlist.ResourceRecordSets {
-		if strings.TrimRight(*record.Name, ".") == resource.Status.ResourceRecordSet {
+		if strings.TrimRight(*record.Name, ".") == (resource.Spec.CustomDns.Route53PrivateHostedZone.Record.Hostname + resource.Spec.CustomDns.Route53PrivateHostedZone.DomainName) {
 			r.log.V(0).Info("Skipping Route53 Record", "Name", record.Name)
 			return nil
 		}
