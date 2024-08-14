@@ -313,7 +313,6 @@ func (r *VpcEndpointReconciler) checkForExistingGoalertSecurityGroup(ctx context
 	// Check if Goalert DNS entry already exists in AWS
 	for _, record := range recordlist.ResourceRecordSets {
 		if strings.TrimRight(*record.Name, ".") == resource.Status.ResourceRecordSet { // record is for goalert
-			// get VPCE, check if its for an alternate cluster
 			for _, vpce := range record.ResourceRecords {
 				if vpce.Value != nil {
 					recordValue := strings.Split(*vpce.Value, "-")
@@ -325,21 +324,26 @@ func (r *VpcEndpointReconciler) checkForExistingGoalertSecurityGroup(ctx context
 						}
 						// get SG ID from groups
 						var sgId string = ""
-						for _, vpce := range resp.VpcEndpoints {
-							r.log.V(0).Info("Checking SG in VPCE:", "vpceID", vpceId)
-							sgId = *vpce.VpcEndpointId
-							sgDescription, err := r.awsClient.FilterSecurityGroupById(ctx, sgId)
-							if err != nil {
-								return nil, err
-							}
-							for _, sg := range sgDescription.SecurityGroups {
-								sgName := strings.Split(*sg.GroupName, "-")
-								if (sgName[len(sgName)-2] + "-" + sgName[len(sgName)-1]) == "goalert-sg" {
-									r.log.V(0).Info("Returning SG ID:", "SGID", (sgName[len(sgName)-2] + sgName[len(sgName)-1]))
-									return &sg, nil
-								}
-							}
+						r.log.V(0).Info("Checking SG in VPCE:", "vpceID", vpceId)
+						sgId = *resp.VpcEndpoints[0].VpcEndpointId
+						sgDescription, err := r.awsClient.FilterSecurityGroupById(ctx, sgId)
+						if err != nil {
+							return nil, err
 						}
+						// var (
+						// 	key string = ""
+						// )
+						// for _, tag := range sgDescription.SecurityGroups[0].Tags {
+						// 	if (*tag.Value == "owned") {
+						// 		key = *tag.Key
+						// 	}
+						// }
+						// if key == "" {
+						// 	r.log.V(0).Info("Could not find owning cluster for SG", "sgId", sgId)
+						// 	return nil, nil
+						// }
+						r.log.V(0).Info("Returning SG:", "Name", &sgDescription.SecurityGroups[0].GroupName)
+						return &sgDescription.SecurityGroups[0], nil
 					}
 				}
 			}
