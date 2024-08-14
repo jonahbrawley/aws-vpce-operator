@@ -334,7 +334,7 @@ func (r *VpcEndpointReconciler) checkForExistingGoalertSecurityGroup(ctx context
 							}
 							for _, sg := range sgDescription.SecurityGroups {
 								sgName := strings.Split(*sg.GroupName, "-")
-								if (sgName[len(sgName)-2] + sgName[len(sgName)-1]) == "goalert-sg" {
+								if (sgName[len(sgName)-2] + "-" + sgName[len(sgName)-1]) == "goalert-sg" {
 									r.log.V(0).Info("Returning SG ID:", "SGID", (sgName[len(sgName)-2] + sgName[len(sgName)-1]))
 									return &sg, nil
 								}
