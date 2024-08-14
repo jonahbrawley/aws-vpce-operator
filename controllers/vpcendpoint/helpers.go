@@ -240,6 +240,51 @@ func (r *VpcEndpointReconciler) getVpcEndpointServiceName(ctx context.Context, v
 func (r *VpcEndpointReconciler) findOrCreateSecurityGroup(ctx context.Context, resource *avov1alpha2.VpcEndpoint) (*ec2Types.SecurityGroup, error) {
 	var sg *ec2Types.SecurityGroup
 
+	// What this does
+	// 1. Gets VPCE ID from the Goalert DNS entry that is already there
+	// 2. Get the SG ID from the VPCE ID
+	// 3. Checks that the SG is for a Goalert endpoint
+	// 4. Sends that SG back to the reconciler, to add its own rules to that SG instead
+
+	recordlist, err := r.awsClient.ListResourceRecordSets(ctx, resource.Status.HostedZoneId)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if Goalert DNS entry already exists in AWS
+	for _, record := range recordlist.ResourceRecordSets {
+		if strings.TrimRight(*record.Name, ".") == resource.Status.ResourceRecordSet { // record is for goalert
+			// get VPCE, check if its for an alternate cluster
+			for _, vpce := range record.ResourceRecords {
+				if vpce.Value != nil {
+					recordValue := strings.Split(*vpce.Value, "-")
+					if recordValue[0] == "vpce" {
+						vpceId := recordValue[0] + "-" + recordValue[1]
+						resp, err := r.awsClient.DescribeSingleVPCEndpointById(ctx, vpceId)
+						if err != nil {
+							return nil, err
+						}
+						// get SG ID from groups
+						var sgId string = ""
+						for _, vpce := range resp.VpcEndpoints {
+							sgId = *vpce.VpcEndpointId
+							sgDescription, err := r.awsClient.FilterSecurityGroupById(ctx, sgId)
+							if err != nil {
+								return nil, err
+							}
+							for _, sg := range sgDescription.SecurityGroups {
+								sgName := strings.Split(*sg.GroupName, "-")
+								if (sgName[len(sgName)-2] + sgName[len(sgName)-1]) == "goalert-sg" {
+									return &sg, nil
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	r.log.V(1).Info("Searching for security group by ID", "id", resource.Status.SecurityGroupId)
 	resp, err := r.awsClient.FilterSecurityGroupById(ctx, resource.Status.SecurityGroupId)
 	if err != nil {

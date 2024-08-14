@@ -343,16 +343,17 @@ func (r *VpcEndpointReconciler) validateR53HostedZoneRecord(ctx context.Context,
 		return errors.New("resource must be specified")
 	}
 
-	// If it is updating the GoAlert DNS entry for an active cluster, do not overwrite.
-	// Instead, elsewhere AVO will add it's corresponding inbound rules to the existing cluster's GoAlert security group.
+	// If it is updating the Goalert DNS entry for an active cluster, do not overwrite.
+	// Instead, elsewhere AVO will add it's corresponding inbound rules to the existing cluster's Goalert security group.
 	recordlist, err := r.awsClient.ListResourceRecordSets(ctx, resource.Status.HostedZoneId)
 	if err != nil {
 		return err
 	}
 
+	// Check if it already exists in AWS
 	for _, record := range recordlist.ResourceRecordSets {
-		if strings.TrimRight(*record.Name, ".") == (resource.Spec.CustomDns.Route53PrivateHostedZone.Record.Hostname + resource.Spec.CustomDns.Route53PrivateHostedZone.DomainName) {
-			r.log.V(0).Info("Skipping Route53 Record", "Name", record.Name)
+		if strings.TrimRight(*record.Name, ".") == resource.Status.ResourceRecordSet {
+			r.log.V(0).Info("Skipping an existing Route53 Record", "RecordName", record.Name)
 			return nil
 		}
 	}
