@@ -57,6 +57,26 @@ func (r *VpcEndpointReconciler) validateSecurityGroup(ctx context.Context, resou
 		return fmt.Errorf("resource must be specified")
 	}
 
+	// Check for preexisting Goalert SG for another cluster in same VPC
+	goalertSg, err := r.checkForExistingGoalertSecurityGroup(ctx, resource)
+	if err != nil {
+		return err
+	}
+	if goalertSg != nil { // add rules to this SG instead
+		r.log.V(0).Info("Existing Goalert SG found. Adding rules to this group.", "GroupName", goalertSg.GroupName)
+		// create ingress and egress
+		ingressInput, egressInput, err := r.generateMissingSecurityGroupRules(ctx, goalertSg, resource)
+		if err != nil {
+			return err
+		}
+		// add to existing SG
+		if _, err := r.awsClient.AuthorizeSecurityGroupRules(ctx, ingressInput, egressInput); err != nil {
+			r.log.V(1).Error(err, "failed to authorize security group rules")
+			return err
+		}
+		r.log.V(0).Info("Added ingress rules to this group")
+	}
+
 	sg, err := r.findOrCreateSecurityGroup(ctx, resource)
 	if err != nil {
 		return err
