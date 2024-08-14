@@ -324,8 +324,9 @@ func (r *VpcEndpointReconciler) checkForExistingGoalertSecurityGroup(ctx context
 						}
 						// get SG ID from groups
 						var sgId string = ""
-						r.log.V(0).Info("Checking SG in VPCE:", "vpceID", vpceId)
+						r.log.V(0).Info("Checking SG in VPCE")
 						sgId = *resp.VpcEndpoints[0].VpcEndpointId
+						r.log.V(0).Info("Checking sgID:", "sgID", sgId)
 						sgDescription, err := r.awsClient.FilterSecurityGroupById(ctx, sgId)
 						if err != nil {
 							return nil, err
