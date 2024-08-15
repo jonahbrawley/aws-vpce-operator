@@ -58,7 +58,7 @@ func (r *VpcEndpointReconciler) validateSecurityGroup(ctx context.Context, resou
 	}
 
 	// Check for preexisting Goalert SG for another cluster in same VPC
-	goalertSg, err := r.checkForExistingGoalertSecurityGroup(ctx, resource)
+	goalertSg, err := r.findExistingGoalertSecurityGroup(ctx, resource)
 	if err != nil {
 		return err
 	}

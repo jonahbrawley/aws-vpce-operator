@@ -298,62 +298,58 @@ func (r *VpcEndpointReconciler) findOrCreateSecurityGroup(ctx context.Context, r
 	return sg, nil
 }
 
-func (r *VpcEndpointReconciler) checkForExistingGoalertSecurityGroup(ctx context.Context, resource *avov1alpha2.VpcEndpoint) (*ec2Types.SecurityGroup, error) {
-	// What this does
-	// 1. Gets VPCE ID from the Goalert DNS entry that is already there
-	// 2. Get the SG ID from the VPCE ID
-	// 3. Checks that the SG is for a Goalert endpoint
-	// 4. Sends that SG back to the reconciler, to add its own rules to that SG instead
-
+// 1. Checks for preexisting Goalert DNS entry
+// 2. Get the SG ID from the VPCE ID
+// 3. Checks that the SG is for a Goalert endpoint
+// 4. Sends that SG back, to add its inbound rules to that SG instead
+func (r *VpcEndpointReconciler) findExistingGoalertSecurityGroup(ctx context.Context, resource *avov1alpha2.VpcEndpoint) (*ec2Types.SecurityGroup, error) {
 	recordlist, err := r.awsClient.ListResourceRecordSets(ctx, resource.Status.HostedZoneId)
 	if err != nil {
 		return nil, err
 	}
 
+	var (
+		targetSet  route53Types.ResourceRecordSet
+		vpceId     string
+		vpceOutput *ec2.DescribeVpcEndpointsOutput
+		sgId       string = ""
+	)
+
 	// Check if Goalert DNS entry already exists in AWS
 	for _, record := range recordlist.ResourceRecordSets {
-		if strings.TrimRight(*record.Name, ".") == resource.Status.ResourceRecordSet { // record is for goalert
-			for _, vpce := range record.ResourceRecords {
-				if vpce.Value != nil {
-					recordValue := strings.Split(*vpce.Value, "-")
-					if recordValue[0] == "vpce" {
-						vpceId := recordValue[0] + "-" + recordValue[1]
-						resp, err := r.awsClient.DescribeSingleVPCEndpointById(ctx, vpceId)
-						if err != nil {
-							return nil, err
-						}
-						// get SG ID from groups
-						var sgId string = ""
-						r.log.V(0).Info("Checking SG in VPCE")
-						sgId = *resp.VpcEndpoints[0].Groups[0].GroupId
-						r.log.V(0).Info("Checking sgID:", "sgID", sgId)
-						sgDescription, err := r.awsClient.FilterSecurityGroupById(ctx, sgId)
-						if err != nil {
-							return nil, err
-						}
-						// for _, sg := range sgDescription.SecurityGroups {
-						// 	sgName := strings.Split(*sg.GroupName, "-")
-						// 	if (sgName[len(sgName)-2] + "-" + sgName[len(sgName)-1]) == "goalert-sg" {
-						// 		// r.log.V(0).Info("Returning SG ID:", "SGID", (sgName[len(sgName)-2] + sgName[len(sgName)-1]))
-						// 		return &sg, nil
-						// 	}
-						// }
-						// var (
-						// 	key string = ""
-						// )
-						// for _, tag := range sgDescription.SecurityGroups[0].Tags {
-						// 	if (*tag.Value == "owned") {
-						// 		key = *tag.Key
-						// 	}
-						// }
-						// if key == "" {
-						// 	r.log.V(0).Info("Could not find owning cluster for SG", "sgId", sgId)
-						// 	return nil, nil
-						// }
-						r.log.V(0).Info("Returning SG:", "Name", &sgDescription.SecurityGroups[0].GroupName)
-						return &sgDescription.SecurityGroups[0], nil
-					}
-				}
+		// If the record is for Goalert
+		if strings.TrimRight(*record.Name, ".") == resource.Status.ResourceRecordSet {
+			targetSet = record
+			break
+		}
+	}
+
+	// Grab the vpceId for the Goalert DNS entry
+	if targetSet.ResourceRecords[0].Value != nil {
+		recordValue := strings.Split(*targetSet.ResourceRecords[0].Value, "-")
+		if recordValue[0] == "vpce" {
+			vpceId = recordValue[0] + "-" + recordValue[1]
+			var err error
+			vpceOutput, err = r.awsClient.DescribeSingleVPCEndpointById(ctx, vpceId)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Get Security Group ID from VPCE description
+	if vpceOutput != nil {
+		r.log.V(0).Info("Checking SG in VPCE:", "vpceID", vpceId)
+		sgId = *vpceOutput.VpcEndpoints[0].VpcEndpointId
+		sgDescription, err := r.awsClient.FilterSecurityGroupById(ctx, sgId)
+		if err != nil {
+			return nil, err
+		}
+		for _, sg := range sgDescription.SecurityGroups {
+			sgName := strings.Split(*sg.GroupName, "-")
+			if (sgName[len(sgName)-2] + "-" + sgName[len(sgName)-1]) == "goalert-sg" {
+				r.log.V(0).Info("Returning SG ID:", "SGID", (sgName[len(sgName)-2] + sgName[len(sgName)-1]))
+				return &sg, nil
 			}
 		}
 	}
